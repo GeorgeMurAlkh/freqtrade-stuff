@@ -7,6 +7,10 @@ from freqtrade.strategy import IStrategy, merge_informative_pair
 from pandas import DataFrame
 
 
+# The main idea is to buy only when overall uptrend in higher informative
+# but in local dip cause BinCluc some king of pullback strategy.
+
+
 def bollinger_bands(stock_price, window_size, num_of_std):
     rolling_mean = stock_price.rolling(window=window_size).mean()
     rolling_std = stock_price.rolling(window=window_size).std()
@@ -38,13 +42,6 @@ class CombinedBinHAndClucV2(IStrategy):
     timeframe = '5m'
 
     stoploss = -0.05
-
-    # trailing_stop = True
-    # # Use 0.01 for backtesting to avoid too good results
-    # trailing_stop_positive_offset = 0.035
-    # trailing_only_offset_is_reached = True
-    # trailing_stop_positive = 0.01
-    # # trailing_stop_positive = 0.005
 
     use_sell_signal = True
     sell_profit_only = False
@@ -82,14 +79,12 @@ class CombinedBinHAndClucV2(IStrategy):
         # dataframe['rsi'] = ta.RSI(dataframe, timeperiod=3)
 
         dataframe['go_long'] = (
-                (dataframe['ssl_high'] > 0)
-                &
-                (dataframe['mfi'].shift().rolling(3).mean() > dataframe['mfi'])
-                &
-                (dataframe['srsi_fk'].shift().rolling(3).mean() > dataframe['srsi_fk'])
-                # &
-                # (dataframe['rsi'] < 80)
-                ).astype('int') * 4
+            (dataframe['ssl_high'] > 0)
+            &
+            (dataframe['mfi'].shift().rolling(3).mean() > dataframe['mfi'])
+            &
+            (dataframe['srsi_fk'].shift().rolling(3).mean() > dataframe['srsi_fk'])
+        ).astype('int') * 4
 
         return dataframe
 
@@ -135,19 +130,21 @@ class CombinedBinHAndClucV2(IStrategy):
         dataframe.loc[
             (dataframe['go_long'] > 0)
             &
-            ((  # strategy BinHV45
+            (
+                (  # strategy BinHV45
                     dataframe['lower'].shift().gt(0) &
                     dataframe['bbdelta'].gt(dataframe['close'] * 0.008) &
                     dataframe['closedelta'].gt(dataframe['close'] * 0.0175) &
                     dataframe['tail'].lt(dataframe['bbdelta'] * 0.25) &
                     dataframe['close'].lt(dataframe['lower'].shift()) &
                     dataframe['close'].le(dataframe['close'].shift())
-            ) |
-            (  # strategy ClucMay72018
+                ) |
+                (  # strategy ClucMay72018
                     (dataframe['close'] < dataframe['ema_slow']) &
                     (dataframe['close'] < 0.985 * dataframe['bb_lowerband']) &
                     (dataframe['volume'] < (dataframe['volume_mean_slow'].shift(1) * 20))
-            )),
+                )
+             ),
             'buy'
         ] = 1
         return dataframe

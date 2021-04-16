@@ -1,14 +1,11 @@
-# --- Do not remove these libs ---
 from freqtrade.strategy import IStrategy, merge_informative_pair
-from typing import Dict, List
-from functools import reduce
 from pandas import DataFrame, Series
-# --------------------------------
-import numpy as np
-
 import talib.abstract as ta
 import freqtrade.vendor.qtpylib.indicators as qtpylib
 from technical.indicators import RMI
+
+
+# The main idea of this strategy is to buy in dips and sell after recovery.
 
 
 def chaikin_mf(df, periods=20):
@@ -37,16 +34,7 @@ class TheRealPullbackV2(IStrategy):
     ignore_roi_if_buy_signal = True
     startup_candle_count = 200
 
-    # def informative_pairs(self):
-    #     informative_pairs = [(self.informative_pair, self.timeframe)]
-    #     return informative_pairs
-
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-
-        '''
-        multiple actions, all based on average, calculation and experience on various indicators,
-        within: RSI, BB, BBW, ADX?, DMI, CCI, CMF, SMA, STOCH, EMA., both for alt and BTC mixed
-        '''
 
         bollinger = qtpylib.bollinger_bands(dataframe['close'], window=20, stds=2)
         dataframe['bb_lowerband'] = bollinger['lower']
@@ -107,8 +95,7 @@ class TheRealPullbackV2(IStrategy):
         return dataframe
 
     def populate_buy_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # print(dataframe['bb_bottom_cross'].tail(50))
-        # print(dataframe.tail())
+
         dataframe.loc[
             (dataframe['buy_signal'] > 0),
             'buy'] = 1
