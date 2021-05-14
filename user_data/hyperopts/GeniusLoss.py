@@ -2,18 +2,27 @@ from freqtrade.optimize.hyperopt import IHyperOptLoss
 import math
 from datetime import datetime
 from pandas import DataFrame, date_range
+import pandas as pd
+from freqtrade.data.btanalysis import calculate_max_drawdown
 
 # Sortino settings
-TARGET_TRADES = 600
+TARGET_TRADES = 2000
 EXPECTED_MAX_PROFIT = 3.0
-MAX_ACCEPTED_TRADE_DURATION = 300
+MAX_ACCEPTED_TRADE_DURATION = 420
 MIN_ACCEPTED_TRADE_DURATION = 2
 
 # Loss settings
 EXPECTED_MAX_PROFIT = 3.0
-WIN_LOSS_WEIGHT = 5
-AVERAGE_PROFIT_WEIGHT = 15
-SORTINO_WEIGHT = 0.01
+WIN_LOSS_WEIGHT = 2
+AVERAGE_PROFIT_WEIGHT = 2
+AVERAGE_PROFIT_THRESHOLD = 2 # 2%
+SORTINO_WEIGHT = 0.02
+TOTAL_PROFIT_WEIGHT = 20
+DRAWDOWN_WEIGHT = 20
+DURATION_WEIGHT = 10
+
+
+
 IGNORE_SMALL_PROFITS = False
 SMALL_PROFITS_THRESHOLD = 0.001  # 0.1%
 
@@ -75,7 +84,10 @@ class GeniusLoss(IHyperOptLoss):
     Adjust those weights to get more suitable results for your strategy
     WIN_LOSS_WEIGHT
     AVERAGE_PROFIT_WEIGHT
+    AVERAGE_PROFIT_THRESHOLD - upper threshold of average profit to rely on (cut off crazy av.profits like 10%+)
     SORTINO_WEIGHT
+    TOTAL_PROFIT_WEIGHT
+
 
     IGNORE_SMALL_PROFITS - this param allow to filter small profits
     (to take into consideration possible spread)
@@ -98,15 +110,25 @@ class GeniusLoss(IHyperOptLoss):
         total_lose = len(results[(results['profit_ratio'] <= 0)])
         average_profit = results['profit_ratio'].mean() * 100
         sortino_ratio = sortino_daily(results, trade_count, min_date, max_date)
+        trade_duration = results['trade_duration'].mean()
+
+        max_drawdown = 100
+        try:
+            max_drawdown, _, _, _, _ = calculate_max_drawdown(
+                results, value_col='profit_ratio')
+        except:
+            pass
 
         if total_lose == 0:
             total_lose = 1
 
-        profit_loss = 1 - total_profit / EXPECTED_MAX_PROFIT
+        profit_loss = (1 - total_profit / EXPECTED_MAX_PROFIT) * TOTAL_PROFIT_WEIGHT
         win_lose_loss = (1 - (total_win / total_lose)) * WIN_LOSS_WEIGHT
-        average_profit_loss = 1 - (average_profit * AVERAGE_PROFIT_WEIGHT)
+        average_profit_loss = 1 - (min(average_profit, AVERAGE_PROFIT_THRESHOLD) * AVERAGE_PROFIT_WEIGHT)
         sortino_ratio_loss = SORTINO_WEIGHT * sortino_ratio
+        drawdown_loss = max_drawdown * DRAWDOWN_WEIGHT
+        duration_loss = DURATION_WEIGHT * min(trade_duration / MAX_ACCEPTED_TRADE_DURATION, 1)
 
-        result = profit_loss + win_lose_loss + average_profit_loss + sortino_ratio_loss
+        result = profit_loss + win_lose_loss + average_profit_loss + sortino_ratio_loss + drawdown_loss + duration_loss
 
         return result
